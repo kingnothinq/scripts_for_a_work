@@ -1,0 +1,112 @@
+"""Скрипт ожидает 2 файла:
+- файл и роутерами и vlan, которые надо проверить;
+- путь к логу DHCPv6 сервера
+Вывод:
+Составляет список таких роутеров и vlan на них, у которых не было обращений к DHCPv6 серверу
+"""
+
+# -*- coding: utf-8 -*-
+
+import bz2
+
+print 'Enter path to IPv6 SVI list:'
+file = raw_input()
+print 'Enter path to DHCPv6 log file:'
+dchpv6_log = raw_input()
+print
+
+routers = []
+vlans = []
+temp_vlans = []
+
+#Открываем файл со списком SVI построчно
+with open(file) as f:            
+    for line in f:
+        
+        #Убираем переводы строк
+        line = line.replace('\n','')
+        
+        #Создаем ключи словаря из списка AR
+        if line.startswith('AR'):
+            routers.append(line)
+            #Создаем список vlan, которые принадлежат AR
+            vlans.append(temp_vlans)
+            temp_vlans = []
+        else:
+            #Вырезаем все Vlan b2c
+            if int(line) > 2999:
+                temp_vlans.append(line)
+    
+    #Убираем 1 элемент списка vlan, т.к. в первый раз он создается пустой
+    vlans.remove([]) 
+
+#Создаем словарь вида AR:[список vlan b2c]    
+vlans_in_ar = dict(zip(routers, vlans))
+
+#Открываем log стандартным способом, а архивы через BZ2File
+if dchpv6_log.endswith('bz2'):
+    print 'Open BZ2'
+    print
+    #Открываем файл с логами DHCPv6 сервера построчно
+    with bz2.BZ2File(dchpv6_log) as f:
+        for line in f:
+            
+            #Проверяем строку на появление в ней имени AR (ключи из словаря)
+            for ar in vlans_in_ar.keys():
+                
+                #Проверяем строку на появление в ней имени vlan (ключи из словаря)
+                for vlan in vlans_in_ar[ar]:
+                    
+                    #Если в строке встретится имя AR и vlan, то нужно удалить такой vlan из списка
+                    if ar in line and vlan in line:
+                        vlans_in_ar[ar].remove(vlan)
+            
+            #Удаляем из ключей такой AR, у которого пуст список vlan
+            for ar in vlans_in_ar.keys():
+                if len(vlans_in_ar[ar]) == 0:
+                    print ar,
+                    print 'is clear. Uncheked ARs:',
+                    print ', '.join(vlans_in_ar.keys())
+                    print
+                    vlans_in_ar.pop(ar)
+            
+            #Останавливаем обработку файла, если список AR пуст
+            if len(vlans_in_ar.keys()) == 0:
+                break
+else:   
+    print 'Open LOG'
+    print
+    with open(dchpv6_log) as f:
+        for line in f:
+            
+            #Проверяем строку на появление в ней имени AR (ключи из словаря)
+            for ar in vlans_in_ar.keys():
+                
+                #Проверяем строку на появление в ней имени vlan (ключи из словаря)
+                for vlan in vlans_in_ar[ar]:
+                    
+                    #Если в строке встретится имя AR и vlan, то нужно удалить такой vlan из списка
+                    if ar in line and vlan in line:
+                        vlans_in_ar[ar].remove(vlan)
+            
+            #Удаляем из ключей такой AR, у которого пуст список vlan
+            for ar in vlans_in_ar.keys():
+                if len(vlans_in_ar[ar]) == 0:
+                    print ar,
+                    print 'is clear. Uncheked ARs:',
+                    print ', '.join(vlans_in_ar.keys())
+                    print
+                    vlans_in_ar.pop(ar)
+            
+            #Останавливаем обработку файла, если список AR пуст
+            if len(vlans_in_ar.keys()) == 0:
+                break
+                
+#Выводим результат   
+print
+print 'Result:\n'            
+for ar in vlans_in_ar.keys():
+    print 
+    print ar, ':' 
+    for vlan in vlans_in_ar[ar]:
+        print vlan,
